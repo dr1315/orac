@@ -79,6 +79,7 @@
 ! 2019/09/26, GT: Bug fix with orbit start-time extraction (file name time
 !                 strings are _rounded_ to nearest second).
 ! 2021/03/10, AP: Gather setup calls into a single routine.
+! 2024/10/14, DR: Fixed call of nchans in PYTHON case; changed dimension name from nc to channels.
 !
 ! Bugs:
 ! None known.
@@ -1142,7 +1143,7 @@ subroutine setup_python(args, channel_ids_user, channel_info, verbose)
 
    call ncdf_open(fid, args%l1b_file, 'setup_python()')
    ! Read actual size of the netCDF4 file
-   nchans  = ncdf_dim_length(fid, 'nc', 'setup_python()')  
+   nchans  = ncdf_dim_length(fid, 'channels', 'setup_python()')  
    call ncdf_get_single_attribute_int(fid, 'max_chan_count', nchans_total)
 
    allocate(channel_ids_user(nchans))
@@ -1211,6 +1212,7 @@ subroutine setup_python(args, channel_ids_user, channel_info, verbose)
    call ncdf_get_arr_attribute_real(fid, 'all_channel_numerical_uncertainty', all_channel_numerical_uncertainty)
    
    ! get year, doy, hour and minute as strings
+   ! This is meant to read in the <start_time> as YYYY-MM-DDTHH:MM:SS
    args%cyear = start_time(1:5)
    args%cmonth = start_time(6:7)
    args%cday = start_time(9:10)

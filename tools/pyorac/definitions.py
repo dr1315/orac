@@ -153,7 +153,7 @@ class FileName:
         self.oractype = None
         self.predef = False
         self.orbit_num = None
-
+        
         # Attempt AATSR L1B filename
         mat = re.search(
             r'ATS_TOA_1P([A-Za-z]{4})(?P<year>\d{4})(?P<month>\d{2})'
@@ -376,6 +376,26 @@ class FileName:
                 )
                 self.orbit_num = 0
 
+            return
+        
+        # Attempt FCI L1C filename
+        mat = re.search( # W_XX-EUMETSAT-Darmstadt,IMG+SAT,MTI1+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_20240924122358_IDPFI_OPE_20240924122007_20240924122023_N__C_0075_0001.nc
+            r'W_XX-EUMETSAT-Darmstadt,IMG\+SAT,MTI1\+FCI-1C-RRAD-FDHSI-FD--CHK-BODY---NC4E_C_EUMT_'
+            r'(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})'
+            r'(?P<hour>\d{2})(?P<min>\d{2})(?P<sec>\d{2})'
+            r'.orac-compatible.nc', filename
+        )
+        if mat:
+            self.sensor = 'PYTHON' # But we want to use the sensor; this is just to handle Simon's work-around 
+            self.platform = 'MTG'
+            self.time = datetime.datetime(
+                int(mat.group('year')), int(mat.group('month')),
+                int(mat.group('day')), int(mat.group('hour')),
+                int(mat.group('min')), int(mat.group('sec')), 0
+            )
+            self.dur = datetime.timedelta(seconds=600)  # Approximately
+            self.geo = filename
+            self.predef = True
             return
 
         # Processed ORAC output
