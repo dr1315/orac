@@ -523,6 +523,8 @@ class FileName:
             return "meteosat-{:d}".format(int(self.platform[4:]) + 7)
         if self.platform.startswith("FY"):
             return "fengyun-" + self.platform[3:].lower()
+        if self.platform.startswith("MTG"):
+            return "meteosat-{:d}".format(int(self.platform[4:]) + 11)
         return self.platform.lower()
 
 

@@ -488,7 +488,7 @@ def _ncdf_lut_filename(inst, label, microphysical_model, atmospheric_model=2,
 
     # Logic which sets the version number to be used for each sensor
     # Could be replaced with a search for the most recent version
-    if inst.sensor == 'EarthCARE':
+    if inst.sensor in ('EarthCARE', 'FCI'):
         version = 21
     elif inst.sensor in ('AATSR', 'SLSTR'):
         version = 12

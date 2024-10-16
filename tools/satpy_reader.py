@@ -6,6 +6,7 @@ NB// As (for now) there is no ability to subset data that is in the PYTHON forma
 
 History:
 ! 2024/10/04, DR: First version.
+! 2024/10/15, DR: Added subsetting in ORAC style and corrected VNIR channels from % reflectance to fractional.
 """
 
 
@@ -41,7 +42,7 @@ supported_sensors = { # dict of sensors, whether they're multi-file or single fi
 } 
 
 
-def read_sat_data(fname, sensor = 'fci'):
+def read_sat_data(fname, sensor = 'fci', x0 = None, x1 = None, y0 = None, y1 = None):
     '''
     Reads in satellite data from the path provided by <fname> using satpy and converts it into netCDF format.
     '''
@@ -86,9 +87,25 @@ def read_sat_data(fname, sensor = 'fci'):
     # Set everything to the coarsest area for now; in theory, we can use the higher res if we want
     os.system('echo "### $(date -u) ### Resampling..."')
     sat_data = sat_data.resample(sat_data.coarsest_area())
+    os.system('echo "### $(date -u) ### Assigning actual granuale dimensions and subsetting if necessary..."')
+    # Define global coords, i.e. x and y
+    # DR: I believe this should be done on the basis of Fortran indexing, i.e. from 1, not 0
+    # We also need to have this set based on relative position in the whole image, i.e. we
+    # can't do this after subsetting the whole image and need to make sure the 1-indexed x 
+    # and y are carried forward to the final product
+    y, x = sat_data[channels[-1]].data.shape[0], sat_data[channels[-1]].data.shape[1]
+    y, x = [_ + 1 for _ in range(y)], [_ + 1 for _ in range(x)]
+    # Attempt subsecting if requested
+    bounds = [x0, x1, y0, y1]
+    if not bounds.count(None) == 4: # Only carry out the next step if we actually need to subsect
+        # Use ORAC convention of bounds starting from 1 and being inclusive for all bounds
+        bounds = [_ - 1 if _ is not None else None for _ in bounds]      
+        sat_data = sat_data[bounds[-2]:bounds[-1]+1, bounds[0]:bounds[1]+1]
+        x = x[bounds[0]:bounds[1]+1]
+        y = y[bounds[-2]:bounds[-1]+1]
     # We need to deal with Dask's laziness before it becomes a problem later
     os.system('echo "### $(date -u) ### Carrying out compute..."')
-    sat_data = sat_data.compute() 
+    sat_data = sat_data.compute()
     # Load in the shared(?) lats, lons, solar angles and viewing angles
     os.system('echo "### $(date -u) ### Calculating angles..."')
     # Take this from the last available channel, as this should be a TIR channel at 2km native res
@@ -129,10 +146,6 @@ def read_sat_data(fname, sensor = 'fci'):
     obs_end_time = sat_data[channels[-1]].time_parameters['observation_end_time']
     # Define the global vars for use in generating the final .nc file
     _FillValue = -999.
-    # Define global coords, i.e. x and y
-    # DR: I believe this should be done on the basis of Fortran indexing, i.e. from 1, not 0
-    y, x = sat_data[channels[-1]].data.shape[0], sat_data[channels[-1]].data.shape[1]
-    y, x = [_ + 1 for _ in range(y)], [_ + 1 for _ in range(x)]
     # Define the channels dimension based on the central wavelengths
     os.system('echo "### $(date -u) ### Concatenating channels..."')
     channel_dim = [ # Keep central wavelengths to 3 decimal places, i.e. as it is presented in the FCI data guide
@@ -153,7 +166,8 @@ def read_sat_data(fname, sensor = 'fci'):
     
     for n, channel in enumerate(channels):
         os.system('echo "### $(date -u) ### Appending channel %s..."' % channel)
-        channel_data[n, :, :] = sat_data[channel][:,:]
+        # Need to double check we are converting to fractional refelctance, rather than %
+        channel_data[n, :, :] = sat_data[channel][:,:] if sat_data[channel].units != '%' else sat_data[channel][:,:]/100
     sat_data = None
     channel_data[channel_data == np.inf] = _FillValue
     channel_data[np.isnan(channel_data)] = _FillValue
@@ -173,7 +187,7 @@ def read_sat_data(fname, sensor = 'fci'):
     all_channel_sw_flag = tuple([1. if _ <= 4 else 0. for _ in channel_dim])
     all_channel_lw_flag = tuple([1. if _ >= 3.7 else 0. for _ in channel_dim])
     all_channel_ids_rttov_coef_sw = tuple([n + 1. if _ <= 4 else 0 for n, _ in enumerate(channel_dim)])
-    all_channel_ids_rttov_coef_lw = tuple([n + 1. if _ >= 3.7 else 0 for n, _ in enumerate(channel_dim)])
+    all_channel_ids_rttov_coef_lw = tuple([n - sum(all_channel_sw_flag) if _ >= 3.7 else 0 for n, _ in enumerate(channel_dim)])
     all_map_ids_view_number = tuple([1. for _ in channels])
     all_channel_fractional_uncertainty = tuple([0. for _ in channels])
     all_channel_minimum_uncertainty = tuple([0. for _ in channels])
@@ -336,7 +350,18 @@ def write_orac_compatible_file(base_dir, nc_file):
 
 
 def main(fname):
-    nc_file, base_dir = read_sat_data(fname)
+    '''
+    Test with a small area of FCI for main.
+    '''
+    midway = int(5568/2)
+    delta_pixels = 1200
+    nc_file, base_dir = read_sat_data(
+        fname,
+        x0 = midway - delta_pixels,
+        x1 = midway + delta_pixels,
+        y0 = midway - delta_pixels,
+        y1 = midway + delta_pixels
+    )
     write_orac_compatible_file(
         base_dir,
         nc_file
